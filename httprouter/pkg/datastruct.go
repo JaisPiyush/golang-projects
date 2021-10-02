@@ -1,5 +1,7 @@
 package pkg
 
+import "strings"
+
 type QueryDict struct {
 	dict map[string][]interface{}
 }
@@ -10,11 +12,24 @@ type QueryDictInterface interface {
 	SetAttr(key string, values ...interface{})
 	Get(key string, defaults ...interface{}) []interface{}
 	Clone() QueryDict
+	Encode() string
 }
 
 func NewQueryDict() *QueryDict {
 	queryDict := new(QueryDict)
 	queryDict.dict = make(map[string][]interface{})
+	return queryDict
+}
+
+func QueryDictFromRawQuery(query string) *QueryDict {
+	fields := strings.Split(query, "&")
+	queryDict := NewQueryDict()
+	for _, part := range fields {
+		if strings.Contains(part, "=") {
+			subs := strings.Split(part, "=")
+			queryDict.Set(subs[0], strings.Split(subs[1], ","))
+		}
+	}
 	return queryDict
 }
 
