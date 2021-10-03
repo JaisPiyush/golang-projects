@@ -27,6 +27,11 @@ type RouterInterface interface {
 	Get(url string, handler HandleFunction)
 	Post(url string, handler HandleFunction)
 	ExecuteRequest(res http.ResponseWriter, req *http.Request)
+	SprintRoutes() string
+}
+
+func (router Router) SprintRoutes() string {
+	return router.route.String()
 }
 
 func (router *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {

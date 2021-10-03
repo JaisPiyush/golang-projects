@@ -34,7 +34,9 @@ type Route struct {
 type RouteInterface interface {
 
 	// Function when any new Node is added
-	AddChild(part []string, method string, handler HandleFunction)
+	AddChild(part string, method string, handler HandleFunction)
+
+	UpdateRoute(method string, handler HandleFunction)
 
 	// Traverse through the tree and add new nodes if required
 	AddNewPattern(url string, method string, handler HandleFunction)
@@ -60,14 +62,21 @@ func (route Route) String() string {
 			childStr = childStr + ", " + child.String()
 		}
 	}
+	keys := "["
+	for key, _ := range route.MethodHandler {
+		keys += key + ", "
+	}
+	keys += "]"
 	childStr += "]"
-	return fmt.Sprintln("Route{ Name: " + route.Name + ", Regex: " + route.Regex + ", IsDynamic: " + strconv.FormatBool(route.IsDynamic) +
-		"Children: " + childStr + ", }")
+	return fmt.Sprintln("\nRoute{ Name: " + route.Name + ", Regex: " + route.Regex + ", IsDynamic: " + strconv.FormatBool(route.IsDynamic) +
+		",Children: " + childStr + ", Methods: " + keys + " }")
 }
 
 func ParsePart(part string, method string, handler HandleFunction) *Route {
-	route := Route{Name: "", Regex: "", IsDynamic: false, MethodHandler: make(map[string]func(*HttpParams))}
-	route.MethodHandler[method] = handler
+	route := Route{Name: "", Regex: "", IsDynamic: false, MethodHandler: make(map[string]HandleFunction)}
+	if handler != nil {
+		route.MethodHandler[method] = handler
+	}
 	route.Children = make([]*Route, 0)
 	if len(part) > 0 && string(part[0]) == "{" && string(part[len(part)-1]) == "}" {
 		part = strings.Replace(part, "{", "", 1)
@@ -84,14 +93,14 @@ func ParsePart(part string, method string, handler HandleFunction) *Route {
 	return &route
 }
 
-func (route *Route) AddChild(part []string, method string, handler HandleFunction) {
-	newRoute := ParsePart(part[0], method, nil)
-	if len(part) > 1 {
-		newRoute.AddChild(part[1:], method, handler)
-	} else {
-		newRoute.MethodHandler[method] = handler
-	}
+func (route *Route) AddChild(part string, method string, handler HandleFunction) *Route {
+	newRoute := ParsePart(part, method, nil)
 	route.Children = append(route.Children, newRoute)
+	return newRoute
+}
+
+func (route *Route) UpdateRoute(method string, handle HandleFunction) {
+	route.MethodHandler[method] = handle
 }
 
 func CleanSplash(url string) string {
@@ -110,29 +119,46 @@ func (route Route) IsRouteMatching(part string) bool {
 	return false
 }
 
+func (route Route) IsDummyRouteMatching(part string) bool {
+	return (!route.IsDynamic && route.Name == part) || (part == fmt.Sprintf("{z%s:%s}", route.Name, route.Regex))
+}
+
 func (route *Route) AddNewPattern(url, method string, handler HandleFunction) {
-	urlParts := strings.Split(CleanSplash(url), "/")
+	urlPatterns := strings.Split(CleanSplash(url), "/")
 	stack := NewRouteStack()
-	route.addNewPattern(urlParts, stack, method, handler)
+	if route.IsDummyRouteMatching(urlPatterns[0]) {
+		if len(urlPatterns) > 1 {
+			urlPatterns = urlPatterns[1:]
+		} else {
+			urlPatterns = make([]string, 0)
+		}
+		route.addNewPattern(urlPatterns, stack, method, handler)
+	}
+
 }
 
 func (route *Route) addNewPattern(parts []string, stack *RouteStack, method string, handler HandleFunction) {
-	if route.IsRouteMatching(parts[0]) {
-		// route part is matching and few parts are left
-		if len(parts) > 1 {
-			// route has not child --> Add child
-			if len(route.Children) == 0 {
-				route.AddChild(parts[1:], method, handler)
-			} else {
-				// route has children --> add them to stack, Pop the top out and addNewPattern
-				stack.PushArray(route.Children)
-				parts = parts[1:]
-			}
+	if len(parts) > 0 && len(route.Children) > 0 {
+		prevStackSize := stack.Size()
+		for _, child := range route.Children {
+			stack.Push(child)
+			break
 		}
-
+		if prevStackSize == stack.Size() {
+			route.AddChild(parts[0], method, nil)
+		}
+	} else if len(route.Children) == 0 && len(parts) > 0 {
+		stack.Push(route.AddChild(parts[0], method, nil))
+	} else if len(parts) == 0 {
+		route.UpdateRoute(method, handler)
 	}
-	// route does not match pop into the next one
-	if stack.Size() > 0 {
+
+	if !stack.IsEmpty() {
+		if len(parts) > 1 {
+			parts = parts[1:]
+		} else {
+			parts = make([]string, 0)
+		}
 		stack.Pop().addNewPattern(parts, stack, method, handler)
 	}
 }
