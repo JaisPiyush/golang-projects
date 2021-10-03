@@ -1,6 +1,10 @@
 package pkg
 
-import "strings"
+import (
+	"errors"
+	"strconv"
+	"strings"
+)
 
 type QueryDict struct {
 	dict map[string][]interface{}
@@ -57,4 +61,61 @@ func (qdict QueryDict) Get(key string, defaults ...interface{}) []interface{} {
 func (qdict QueryDict) Clone() *QueryDict {
 	new_qdict := qdict
 	return &new_qdict
+}
+
+type RouteStack struct {
+	_data []*Route
+}
+
+type RouteStackInterface interface {
+	IsEmpty() bool
+	Size() int
+	Top() *Route
+	Push(data *Route)
+	PushArray(arr []*Route)
+	Pop() *Route
+	get(index int) *Route
+}
+
+func NewRouteStack() *RouteStack {
+	return &RouteStack{_data: make([]*Route, 0)}
+}
+
+func (RouteStack RouteStack) Size() int {
+	return len(RouteStack._data)
+}
+
+func (RouteStack RouteStack) IsEmpty() bool {
+	return RouteStack.Size() == 0
+}
+
+func (RouteStack RouteStack) get(index int) (*Route, error) {
+	if index < RouteStack.Size() {
+		return RouteStack._data[index], nil
+	}
+	return nil, errors.New("index " + strconv.Itoa(index) + " out of range")
+}
+
+func (RouteStack RouteStack) Top() *Route {
+	if data, err := RouteStack.get(RouteStack.Size() - 1); err == nil {
+		return data
+	}
+	return nil
+}
+
+func (RouteStack *RouteStack) Push(data *Route) {
+	RouteStack._data = append(RouteStack._data, data)
+}
+func (RouteStack *RouteStack) PushArray(arr []*Route) {
+	for i := len(arr) - 1; i >= 0; i = i - 1 {
+		RouteStack.Push(arr[i])
+	}
+}
+
+func (RouteStack *RouteStack) Pop() *Route {
+	data := RouteStack.Top()
+	if data != nil {
+		RouteStack._data = RouteStack._data[0 : RouteStack.Size()-1]
+	}
+	return data
 }
