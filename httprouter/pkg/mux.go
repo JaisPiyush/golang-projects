@@ -46,7 +46,7 @@ func (router *Router) Post(url string, handler HandleFunction) {
 	router.route.AddNewPattern(url, "POST", handler)
 }
 
-func (router Router) ExecuteRequest(res http.ResponseWriter, req *http.Request) {
+func (router *Router) ExecuteRequest(res http.ResponseWriter, req *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
 			router.ErrorHandler(res, req)

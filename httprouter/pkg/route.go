@@ -163,40 +163,53 @@ func (route *Route) addNewPattern(parts []string, stack *RouteStack, method stri
 	}
 }
 
-func (route Route) ExecuteHandler(params *HttpParams) error {
+func (route *Route) ExecuteHandler(params *HttpParams) error {
 	url := params.Url.Path
 	urlParts := strings.Split(CleanSplash(url), "/")
 	stack := NewRouteStack()
+	if len(urlParts) > 1 {
+		urlParts = urlParts[1:]
+	} else {
+		urlParts = make([]string, 0)
+	}
 	if params, handler, err := route.findRoute(urlParts, params, stack); err == nil {
 		handler(params)
 		return nil
 	}
-	return errors.New("no method handler found")
+	return errors.New("no match found")
 }
 
 /*
 DFS Algorithm to match url
 
 */
-func (route Route) findRoute(parts []string, params *HttpParams, stack *RouteStack) (*HttpParams, HandleFunction, error) {
-	if route.IsRouteMatching(parts[0]) {
-		if route.IsDynamic {
-			params.Args[route.Name] = parts[0]
-		}
-		if len(parts) > 1 && len(route.Children) > 0 {
-			stack.PushArray(route.Children)
+func (route *Route) findRoute(parts []string, params *HttpParams, stack *RouteStack) (*HttpParams, HandleFunction, error) {
 
-		} else if handler, err := route.MethodHandler[params.Method]; len(parts) == 1 && !err {
-			if params.Url.RawQuery != "" {
-				params.Get = QueryDictFromRawQuery(params.Url.RawQuery)
+	if len(parts) > 0 && len(route.Children) > 0 {
+		for _, child := range route.Children {
+			if child.IsRouteMatching(parts[0]) {
+				stack.Push(child)
 			}
-			// TODO: Need to implement body digester for post requests
-			return params, handler, nil
 		}
+	} else if len(parts) > 0 && len(route.Children) == 0 {
+		// need to move next node on breadth
+		parts = append([]string{parts[0]}, parts...)
+	} else if len(parts) == 0 {
+		return params, route.MethodHandler[params.Method], nil
 	}
-	if stack.Size() > 0 {
-		return stack.Pop().findRoute(parts, params, stack)
+
+	if !stack.IsEmpty() {
+		top := stack.Pop()
+		if top.IsDynamic && len(parts) > 0 {
+			params.Args[top.Name] = parts[0]
+		}
+		if len(parts) > 1 {
+			parts = parts[1:]
+		} else {
+			parts = make([]string, 0)
+		}
+		return top.findRoute(parts, params, stack)
 	}
-	return params, nil, errors.New("no method handler found")
+	return params, nil, errors.New("no method found")
 
 }
